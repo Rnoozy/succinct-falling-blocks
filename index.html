@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Succinct Falling Blocks</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            text-align: center;
+            color: white;
+            font-family: 'Orbitron', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(45deg, #1a1a1a, #003366, #0066cc);
+            background-size: 400% 400%;
+            animation: gradientBG 10s ease infinite;
+        }
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .game-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
+            max-width: 90%;
+            margin: 0 auto;
+        }
+        canvas {
+            background-color: #111;
+            display: block;
+            border: 5px solid #0066cc;
+            box-shadow: 0px 10px 20px rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            width: 300px;
+            height: 400px;
+        }
+        .info-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        h1 {
+            font-size: 36px;
+            margin: 0;
+            text-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);
+            color: #00ccff;
+            animation: glow 1.5s infinite alternate;
+        }
+        @keyframes glow {
+            from {
+                text-shadow: 0 0 10px #00ccff, 0 0 20px #00ccff, 0 0 30px #00ccff;
+            }
+            to {
+                text-shadow: 0 0 20px #00ccff, 0 0 30px #00ccff, 0 0 40px #00ccff;
+            }
+        }
+        .instructions {
+            font-size: 16px;
+            margin: 10px 0;
+            color: #ddd;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        .score-box {
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            display: inline-block;
+            border: 2px solid #0066cc;
+        }
+        #gameOver, #restartText {
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            display: none;
+            margin: 20px 0;
+        }
+        #gameOver {
+            color: #ff4444;
+            animation: shake 0.5s infinite;
+        }
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+            100% { transform: translateX(0); }
+        }
+        #restartText {
+            color: #00ffcc;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            overflow: hidden;
+        }
+        .particle {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            animation: float linear infinite;
+        }
+        @keyframes float {
+            to {
+                transform: translateY(-100vh);
+            }
+        }
+        .mission-box {
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            display: inline-block;
+            border: 2px solid #0066cc;
+            animation: slideIn 1s ease-out;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="particles" id="particles"></div>
+
+    <div class="game-container">
+        <!-- Canvas Game -->
+        <canvas id="gameCanvas" width="300" height="400"></canvas>
+
+        <!-- Container untuk Info (Score, Mission, dll.) -->
+        <div class="info-container">
+            <h1>🎮 Succinct Falling Blocks</h1>
+            <p class="instructions">Move the paddle with <b>← Left</b> and <b>→ Right</b> to catch the blocks!</p>
+            <p id="restartText">Press ENTER to start or restart</p>
+
+            <div class="score-box">
+                <p id="score">Score: 0</p>
+                <p id="highScore">High Score: 0</p>
+            </div>
+            
+            <div class="mission-box">
+                <p>Mission: Catch as many blocks as you can!</p>
+                <p>Avoid letting them fall to the bottom.</p>
+            </div>
+            
+            <p id="gameOver">💀 GAME OVER 💀</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        let blocks = [], particles = [];
+        let paddle, score, highScore, gameOver, gameStarted = false;
+        let keys = {};
+        let speedLevel = 1; // Variabel untuk menyimpan level kecepatan
+        const baseSpeed = 2; // Kecepatan dasar blok
+        const speedIncrement = 0.05; // Peningkatan kecepatan setiap kali menangkap blok
+
+        // Load WASM module
+        async function loadWasm() {
+            const wasm = await import("./pkg/your_wasm_module.js");
+            return wasm;
+        }
+
+        // Verify score with SP1
+        async function verifyScore(score) {
+            const wasm = await loadWasm();
+            const isValid = wasm.generate_proof(score);
+            if (isValid) {
+                alert(`Proof generated! Your score ${score} is valid.`);
+            } else {
+                alert("Invalid score.");
+            }
+        }
+
+        // Background particles
+        const particleContainer = document.getElementById("particles");
+        function createBackgroundParticles() {
+            for (let i = 0; i < 50; i++) {
+                const particle = document.createElement("div");
+                particle.classList.add("particle");
+                particle.style.width = `${Math.random() * 5 + 2}px`;
+                particle.style.height = particle.style.width;
+                particle.style.left = `${Math.random() * 100}vw`;
+                particle.style.top = `${Math.random() * 100}vh`;
+                particle.style.animationDuration = `${Math.random() * 5 + 5}s`;
+                particleContainer.appendChild(particle);
+            }
+        }
+        createBackgroundParticles();
+
+        function initGame() {
+            blocks = [];
+            blocks.push(createNewBlock()); // Hanya satu blok yang aktif
+
+            paddle = { x: 125, y: 360, width: 80, height: 12 };
+            score = 0;
+            highScore = localStorage.getItem("highScore") || 0; // Ambil high score dari localStorage
+            gameOver = false;
+            gameStarted = false;
+            speedLevel = 1; // Reset level kecepatan
+
+            updateScoreDisplay();
+            document.getElementById("gameOver").style.display = "none";
+            document.getElementById("restartText").style.display = "block";
+        }
+
+        function update() {
+            if (!gameStarted || gameOver) return;
+
+            // Hanya satu blok yang aktif
+            let block = blocks[0];
+
+            block.y += block.speed;
+
+            if (block.y + block.height >= paddle.y &&
+                block.x + block.width > paddle.x &&
+                block.x < paddle.x + paddle.width) {
+                
+                score += 1; // Mengubah skor menjadi 1 per blok yang ditangkap
+                particles.push(createParticles(block.x + block.width / 2, block.y));
+                blocks[0] = createNewBlock(); // Buat blok baru setelah blok ditangkap
+                updateScoreDisplay();
+
+                // Tingkatkan kecepatan blok 0.05 kali lipat
+                speedLevel += speedIncrement;
+            }
+
+            if (block.y > canvas.height) {
+                gameOver = true;
+                document.getElementById("gameOver").style.display = "block";
+                document.getElementById("restartText").style.display = "block"; 
+                document.body.style.backgroundColor = "#ff0000";
+                setTimeout(() => document.body.style.backgroundColor = "#ff99cc", 300);
+
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem("highScore", highScore);
+                    verifyScore(highScore); // Verifikasi skor dengan SP1
+                }
+                updateScoreDisplay();
+            }
+
+            particles.forEach((p, i) => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                if (p.life <= 0) particles.splice(i, 1);
+            });
+
+            if (keys["ArrowLeft"] && paddle.x > 0) paddle.x -= 5;
+            if (keys["ArrowRight"] && paddle.x + paddle.width < canvas.width) paddle.x += 5;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Hanya satu blok yang digambar
+            if (blocks.length > 0) {
+                let block = blocks[0];
+                // Gradient untuk blok
+                let gradient = ctx.createLinearGradient(block.x, block.y, block.x + block.width, block.y + block.height);
+                gradient.addColorStop(0, block.color);
+                gradient.addColorStop(1, "white");
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.roundRect(block.x, block.y, block.width, block.height, 10); // Rounded corners
+                ctx.fill();
+                ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetX = 5;
+                ctx.shadowOffsetY = 5;
+            }
+
+            // Paddle
+            ctx.fillStyle = "#00ccff"; // Warna paddle bertema Succinct
+            ctx.beginPath();
+            ctx.roundRect(paddle.x, paddle.y, paddle.width, paddle.height, 5); // Rounded corners
+            ctx.fill();
+
+            // Particles
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, 4, 4);
+            });
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            if (!gameStarted) {
+                gameStarted = true;
+                document.getElementById("restartText").style.display = "none";
+            }
+        }
+
+        function restartGame() {
+            initGame();
+            startGame();
+        }
+
+        function createNewBlock() {
+            return {
+                x: Math.random() * (canvas.width - 50),
+                y: 0,
+                width: 50,
+                height: 50,
+                speed: baseSpeed * speedLevel, // Kecepatan blok berdasarkan level kecepatan
+                color: getRandomColor()
+            };
+        }
+
+        function createParticles(x, y) {
+            let particles = [];
+            for (let i = 0; i < 10; i++) {
+                particles.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2,
+                    life: 20,
+                    color: getRandomColor()
+                });
+            }
+            return particles;
+        }
+
+        function getRandomColor() {
+            const colors = ["#FF6B6B", "#4ECDC4", "#FFE66D", "#45B7FF", "#FFA07A", "#DDA0DD"];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+
+        function updateScoreDisplay() {
+            document.getElementById("score").textContent = `Score: ${score}`;
+            document.getElementById("highScore").textContent = `High Score: ${highScore}`;
+        }
+
+        document.addEventListener("keydown", (event) => {
+            keys[event.key] = true;
+            if (event.key === "Enter") {
+                if (gameOver) restartGame();
+                else startGame();
+            }
+        });
+
+        document.addEventListener("keyup", (event) => keys[event.key] = false);
+
+        initGame();
+        gameLoop();
+    </script>
+
+</body>
+</html>
